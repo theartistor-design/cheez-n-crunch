@@ -1434,6 +1434,51 @@
         bottom: 80px; /* Adjust to stay above mobile bar */
       }
     }
+
+    @media (max-width: 480px) {
+      .hero-title {
+        font-size: 2.4rem !important;
+      }
+      .hero-subtitle {
+        font-size: 0.9rem !important;
+      }
+      .section-header h2 {
+        font-size: 2.2rem !important;
+      }
+      .section-header p {
+        font-size: 1.1rem !important;
+      }
+      .topping-values {
+        grid-template-columns: repeat(2, 1fr) !important;
+      }
+      .about-bullets {
+        grid-template-columns: 1fr !important;
+      }
+    }
+
+    /* Motion accessibility */
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation-delay: 0s !important;
+        animation-duration: 0s !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0s !important;
+        scroll-behavior: auto !important;
+      }
+      .floating-food, .fire-glow, .steam-line, .hero-bg {
+        animation: none !important;
+        display: none !important;
+      }
+    }
+
+    /* FOUC Prevention */
+    .js-active .logo-container,
+    .js-active #hero-eyebrow,
+    .js-active #hero-title,
+    .js-active .hero-ctas .btn,
+    .js-active .hero-hours {
+      opacity: 0;
+    }
   </style>
 </head>
 <body>
@@ -1795,6 +1840,7 @@
 
   <!-- CORE JAVASCRIPT LOGIC (Menu Data, Cart System, GSAP Animations) -->
   <script>
+    document.documentElement.classList.add('js-active');
     // ----------------------------------------------------
     // MENU DATA DICTIONARY
     // ----------------------------------------------------
@@ -2104,28 +2150,50 @@
         }
       }
       
-      loadHeroFloatingEmojis();
+      // Check prefers-reduced-motion
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      if (!prefersReducedMotion) {
+        loadHeroFloatingEmojis();
+      }
       loadHotDeals();
       loadTimeDeals();
       loadCategoryTabs();
       selectCategory(activeCategory);
       updateCartUI();
 
-      // Register GSAP ScrollTrigger
-      gsap.registerPlugin(ScrollTrigger);
-      
-      // Navbar scroll behavior
-      window.addEventListener("scroll", () => {
-        const header = document.getElementById("main-header");
-        if (window.scrollY > 50) {
-          header.classList.add("scrolled");
-        } else {
-          header.classList.remove("scrolled");
-        }
-      });
+      // Remove FOUC class once DOM is loaded and initialized
+      setTimeout(() => {
+        document.documentElement.classList.remove('js-active');
+      }, 100);
 
-      runEntranceAnimations();
-      initScrollAnimations();
+      if (!prefersReducedMotion) {
+        // Register GSAP ScrollTrigger
+        gsap.registerPlugin(ScrollTrigger);
+        
+        // Navbar scroll behavior
+        window.addEventListener("scroll", () => {
+          const header = document.getElementById("main-header");
+          if (window.scrollY > 50) {
+            header.classList.add("scrolled");
+          } else {
+            header.classList.remove("scrolled");
+          }
+        });
+
+        runEntranceAnimations();
+        initScrollAnimations();
+      } else {
+        // Fallback for users preferring reduced motion
+        const header = document.getElementById("main-header");
+        window.addEventListener("scroll", () => {
+          if (window.scrollY > 50) {
+            header.classList.add("scrolled");
+          } else {
+            header.classList.remove("scrolled");
+          }
+        });
+      }
     });
 
     // ----------------------------------------------------
@@ -2254,29 +2322,35 @@
         ease: "back.out(1.5)"
       });
 
-      // 3. Section Headers slide up from bottom
+      // 3. Section Headers slide up from bottom with safety checks
       gsap.utils.toArray(".section-header").forEach(header => {
-        gsap.from(header.querySelector("h2"), {
-          scrollTrigger: {
-            trigger: header,
-            start: "top 85%"
-          },
-          y: 70,
-          opacity: 0,
-          duration: 0.9,
-          ease: "power3.out"
-        });
-        gsap.from(header.querySelector("p"), {
-          scrollTrigger: {
-            trigger: header,
-            start: "top 80%"
-          },
-          y: 40,
-          opacity: 0,
-          duration: 0.7,
-          ease: "power2.out",
-          delay: 0.15
-        });
+        const h2 = header.querySelector("h2");
+        const p = header.querySelector("p");
+        if (h2) {
+          gsap.from(h2, {
+            scrollTrigger: {
+              trigger: header,
+              start: "top 85%"
+            },
+            y: 70,
+            opacity: 0,
+            duration: 0.9,
+            ease: "power3.out"
+          });
+        }
+        if (p) {
+          gsap.from(p, {
+            scrollTrigger: {
+              trigger: header,
+              start: "top 80%"
+            },
+            y: 40,
+            opacity: 0,
+            duration: 0.7,
+            ease: "power2.out",
+            delay: 0.15
+          });
+        }
       });
 
       // 4. Stagger alternate slide-in for Deal Cards (left & right entry)
@@ -2372,7 +2446,8 @@
       categoryKeys.forEach(key => {
         const tab = document.createElement("div");
         tab.className = `menu-tab ${key === activeCategory ? 'active' : ''}`;
-        tab.setAttribute("onclick", `selectCategory('${key}')`);
+        tab.setAttribute("data-category", key);
+        tab.addEventListener("click", () => selectCategory(key));
         tab.innerHTML = `<span>${categoryIcons[key] || "🍽️"}</span> ${menuData[key].title}`;
         wrapper.appendChild(tab);
       });
@@ -2381,14 +2456,14 @@
     function selectCategory(categoryKey) {
       activeCategory = categoryKey;
       
-      // Update tabs UI
+      // Update tabs UI safely using data attribute
       document.querySelectorAll(".menu-tab").forEach(tab => {
-        tab.classList.remove("active");
+        if (tab.getAttribute("data-category") === categoryKey) {
+          tab.classList.add("active");
+        } else {
+          tab.classList.remove("active");
+        }
       });
-      const activeTab = Array.from(document.querySelectorAll(".menu-tab")).find(tab => 
-        tab.getAttribute("onclick").includes(`'${categoryKey}'`)
-      );
-      if (activeTab) activeTab.classList.add("active");
 
       // Update Section Titles
       const category = menuData[categoryKey];
@@ -2441,7 +2516,7 @@
 
         card.innerHTML = `
           <div class="menu-card-img-container">
-            <img src="${item.image}" alt="${item.name}" class="menu-card-img">
+            <img src="${item.image}" alt="${item.name}" class="menu-card-img" onerror="this.onerror=null; this.src='assets/images/logo.jpg';">
             ${steamHtml}
           </div>
           <div class="menu-card-content">
